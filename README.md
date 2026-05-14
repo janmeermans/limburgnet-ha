@@ -22,7 +22,7 @@ Elke sensor heeft ook deze attributen:
 
 1. Ga in Home Assistant naar **HACS → Integraties**
 2. Klik rechtsboven op de **drie puntjes** → **Aangepaste repositories**
-3. Voeg toe: `https://github.com/JOUW_GITHUB_NAAM/limburgnet-ha`
+3. Voeg toe: `https://github.com/janmeermans/limburgnet-ha`
 4. Categorie: **Integratie**
 5. Klik **Toevoegen**
 6. Zoek op **Limburg.net** en installeer
