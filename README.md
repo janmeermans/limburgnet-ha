@@ -43,34 +43,9 @@ Elke sensor heeft ook deze attributen:
 |------|-----------|-------------|
 | E-mailadres | ✅ | Je e-mailadres voor limburg.net |
 | Wachtwoord | ✅ | Je wachtwoord voor limburg.net |
-| Locatie cookie | ❌ | Kopieer uit browser als login mislukt (zie hieronder) |
 
-### Locatie cookie (optioneel)
-
-Als de login niet werkt, heb je de `locatie` cookie nodig:
-
-1. Open Chrome en ga naar [limburg.net](https://limburg.net)
-2. Open DevTools (F12) → tabblad **Application**
-3. Links: **Cookies** → `https://limburg.net`
-4. Kopieer de waarde van de `locatie` cookie
-5. Plak die in het **Locatie cookie** veld tijdens de setup
-
-## Dashboard kaart
-
-```yaml
-type: entities
-title: "♻️ Afvalophaling"
-entities:
-  - entity: sensor.limburg_net_restfractie_huisvuil
-    name: Restfractie
-  - entity: sensor.limburg_net_gft_groente_fruit_tuin
-    name: GFT
-```
 
 ## Problemen?
 
-Open een [issue op GitHub](https://github.com/JOUW_GITHUB_NAAM/limburgnet-ha/issues).
+Open een [issue op GitHub](https://github.com/janmeermans/limburgnet-ha/issues).
 
-## Licentie
-
-MIT License — vrij te gebruiken en aan te passen.
