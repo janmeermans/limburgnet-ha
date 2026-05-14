@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Limburg.net instellen",
+        "description": "Vul je inloggegevens in voor limburg.net",
+        "data": {
+          "email": "E-mailadres",
+          "password": "Wachtwoord",
+          "locatie": "Locatie cookie (optioneel)"
+        },
+        "data_description": {
+          "locatie": "Kopieer de 'locatie' cookie uit je browser als de login niet werkt. Ga naar DevTools → Application → Cookies → limburg.net → locatie."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Inloggen mislukt. Controleer je e-mailadres en wachtwoord."
+    },
+    "abort": {
+      "already_configured": "Dit account is al geconfigureerd."
+    }
+  }
+}
