@@ -63,6 +63,10 @@ Attributes per quota sensor:
 | Email address | ✅ | Your limburg.net email address |
 | Password | ✅ | Your limburg.net password |
 
+<img width="352" height="668" alt="image" src="https://github.com/user-attachments/assets/e3e6c16f-8259-4091-aabb-c36c6af1d983" />
+
+
+
 ## Issues?
 
 Please open an [issue on GitHub](https://github.com/janmeermans/limburgnet-ha/issues).
