@@ -34,16 +34,26 @@ async def async_setup_entry(
 
     entiteiten = []
 
-    # Huis-aan-huis sensoren
+    # Huis-aan-huis sensoren — altijd aanmaken
     for fractie in FRACTIES:
         entiteiten.append(LimburgNetLedingSensor(coordinator, fractie))
 
-    # Containerpark quota sensoren — één per fractie in de quota lijst
+    # Containerpark quota sensoren — aanmaken op basis van geladen data
     data = coordinator.data or {}
-    for quota in (data.get("quota") or []):
+    quota_lijst = data.get("quota") or []
+
+    for quota in quota_lijst:
         entiteiten.append(LimburgNetQuotaSensor(coordinator, quota["fractie"]))
 
-    async_add_entities(entiteiten)
+    async_add_entities(entiteiten, update_before_add=True)
+
+    # Als er geen quota waren, log een waarschuwing
+    if not quota_lijst:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Geen containerpark quota gevonden in data. "
+            "Controleer of de API bereikbaar is: /api-proxy/recyclepark/quotum/fracties"
+        )
 
 
 # ── HUIS-AAN-HUIS SENSOR ─────────────────────────────────────────────────────
@@ -64,7 +74,6 @@ class LimburgNetLedingSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Gewicht van de laatste ophaling in kg."""
         data = self.coordinator.data
         if not data:
             return None
@@ -73,7 +82,6 @@ class LimburgNetLedingSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Extra attributen."""
         data = self.coordinator.data
         if not data:
             return {}
@@ -104,13 +112,11 @@ class LimburgNetQuotaSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: LimburgNetCoordinator, fractie_naam: str) -> None:
         super().__init__(coordinator)
         self._fractie_naam   = fractie_naam
-        # Maak een veilige entity ID van de fractienaam
         safe_naam            = fractie_naam.lower().replace(" ", "_").replace(",", "").replace(".", "")
         self._attr_unique_id = f"limburgnet_quota_{safe_naam}"
         self._attr_name      = f"Limburg.net Quota {fractie_naam}"
 
     def _quota_item(self) -> dict | None:
-        """Zoek het quota item voor deze fractie."""
         data = self.coordinator.data
         if not data:
             return None
@@ -121,35 +127,31 @@ class LimburgNetQuotaSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Resterend quota — de hoofdwaarde van de sensor."""
         item = self._quota_item()
         return item["resterend_aantal"] if item else None
 
     @property
     def native_unit_of_measurement(self) -> str:
-        """Eenheid dynamisch bepalen op basis van API data (Kg, stuks, ...)."""
         item = self._quota_item()
         if item:
             eenheid = item.get("eenheid", "Kg")
-            # HA begrijpt "kg" maar niet "Kg" — normaliseer
             return eenheid.lower() if eenheid.lower() == "kg" else eenheid
         return "kg"
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Alle quota details als attributen."""
         item = self._quota_item()
         if not item:
             return {}
         return {
-            "totaal_quota":   item.get("totaal_aantal"),
-            "gebruikt":       round(
+            "totaal_quota":  item.get("totaal_aantal"),
+            "gebruikt":      round(
                 (item.get("totaal_aantal") or 0) - (item.get("resterend_aantal") or 0), 2
             ),
-            "eenheid":        item.get("eenheid"),
-            "tarief_bedrag":  item.get("tarief_bedrag"),
-            "quotum_nummer":  item.get("quotum_nummer"),
-            "fractie":        self._fractie_naam,
+            "eenheid":       item.get("eenheid"),
+            "tarief_bedrag": item.get("tarief_bedrag"),
+            "quotum_nummer": item.get("quotum_nummer"),
+            "fractie":       self._fractie_naam,
         }
 
     @property

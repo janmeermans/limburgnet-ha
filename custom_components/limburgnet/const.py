@@ -15,7 +15,7 @@ FRACTIE_NAMEN = {
 }
 
 # Containerpark quota API
-RECYCLEPARK_QUOTA_URL = f"{BASE_URL}/api-proxy/recyclepark/quotum/fracties"
+RECYCLEPARK_QUOTA_URL = f"{BASE_URL}/api-proxy/recyclagepark/quotum/fracties"
 
 SCAN_INTERVAL_HOURS = 6
 
