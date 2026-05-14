@@ -6,7 +6,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 
 from .api import LimburgNetAPI
-from .const import CONF_LOCATIE, DOMAIN
+from .const import DOMAIN
 from .coordinator import LimburgNetCoordinator
 
 PLATFORMS = [Platform.SENSOR]
@@ -17,14 +17,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = LimburgNetAPI(
         username=entry.data[CONF_EMAIL],
         password=entry.data[CONF_PASSWORD],
-        locatie=entry.data.get(CONF_LOCATIE, ""),
     )
 
     coordinator = LimburgNetCoordinator(hass, api)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
-
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

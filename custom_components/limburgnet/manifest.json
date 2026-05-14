@@ -1,12 +1,12 @@
 {
   "domain": "limburgnet",
   "name": "Limburg.net Afvalophaling",
-  "version": "1.0.0",
-  "documentation": "https://github.com/JOUW_GITHUB_NAAM/limburgnet-ha",
-  "issue_tracker": "https://github.com/JOUW_GITHUB_NAAM/limburgnet-ha/issues",
+  "version": "0.1.1",
+  "documentation": "https://github.com/janmeermans/limburgnet-ha",
+  "issue_tracker": "https://github.com/janmeermans/limburgnet-ha/issues",
   "requirements": ["requests>=2.28.0"],
   "dependencies": [],
-  "codeowners": ["@JOUW_GITHUB_NAAM"],
+  "codeowners": ["@janmeermans"],
   "iot_class": "cloud_polling",
   "config_flow": true
 }

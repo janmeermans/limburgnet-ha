@@ -1,7 +1,6 @@
 """Constanten voor de Limburg.net integratie."""
 
 DOMAIN = "limburgnet"
-CONF_LOCATIE = "locatie"
 
 BASE_URL    = "https://limburg.net"
 LOGIN_PAGE  = "https://limburg.net/inloggen"

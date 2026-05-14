@@ -7,12 +7,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from .const import (
-    BASE_URL,
-    LOGIN_CHECK,
-    LOGIN_PAGE,
-    USER_AGENT,
-)
+from .const import BASE_URL, LOGIN_CHECK, LOGIN_PAGE, USER_AGENT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,16 +15,12 @@ _LOGGER = logging.getLogger(__name__)
 class LimburgNetAPI:
     """Client voor de Limburg.net API."""
 
-    def __init__(self, username: str, password: str, locatie: str = "") -> None:
+    def __init__(self, username: str, password: str) -> None:
         self._username = username
         self._password = password
-        self._locatie  = locatie
 
     def haal_ledigingen_op(self) -> dict[str, dict]:
-        """
-        Login en haal ledigingen op voor alle fracties.
-        Geeft een dict terug: {"restfractie": {...}, "gft": {...}}
-        """
+        """Login en haal ledigingen op voor alle fracties."""
         token = self._login()
         resultaat = {}
 
@@ -49,9 +40,6 @@ class LimburgNetAPI:
     def _login(self) -> str:
         """Login op Limburg.net en geef JWT token terug."""
         session = requests.Session()
-
-        if self._locatie:
-            session.cookies.set("locatie", self._locatie, domain=".limburg.net")
 
         session.headers.update({
             "User-Agent":      USER_AGENT,
@@ -90,13 +78,12 @@ class LimburgNetAPI:
         try:
             data = resp.json()
         except json.JSONDecodeError as err:
-            raise ValueError(f"Onverwacht antwoord van server: {resp.text[:200]}") from err
+            raise ValueError(f"Onverwacht antwoord van server") from err
 
         token = (
             data.get("token")
             or (data.get("data") or {}).get("jwtToken")
             or data.get("jwtToken")
-            or data.get("access_token")
             or ""
         )
 
@@ -118,14 +105,12 @@ class LimburgNetAPI:
             "Sec-Fetch-Mode":  "cors",
             "Sec-Fetch-Site":  "same-origin",
         }
-        if self._locatie:
-            headers["Cookie"] = f"locatie={self._locatie}"
 
         url = f"{BASE_URL}/api-proxy/container/ledigingen/{fractie}"
         resp = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
 
         if resp.status_code == 401:
-            raise ValueError("Token verlopen — opnieuw inloggen vereist")
+            raise ValueError("Token verlopen")
         if resp.status_code == 404:
             raise ValueError(f"Fractie '{fractie}' niet gevonden")
 
