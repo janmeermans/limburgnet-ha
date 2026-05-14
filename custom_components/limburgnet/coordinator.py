@@ -26,10 +26,10 @@ class LimburgNetCoordinator(DataUpdateCoordinator):
         self.api = api
 
     async def _async_update_data(self) -> dict:
-        """Haal data op — wordt automatisch aangeroepen door HA."""
+        """Haal alle data op — wordt automatisch aangeroepen door HA."""
         try:
             return await self.hass.async_add_executor_job(
-                self.api.haal_ledigingen_op
+                self.api.haal_alle_data_op
             )
         except ValueError as err:
             raise UpdateFailed(f"Fout bij ophalen data: {err}") from err
