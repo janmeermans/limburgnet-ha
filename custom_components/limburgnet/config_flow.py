@@ -41,7 +41,7 @@ class LimburgNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             api = LimburgNetAPI(email, password)
             try:
-                await self.hass.async_add_executor_job(api.haal_ledigingen_op)
+                await self.hass.async_add_executor_job(api.haal_alle_data_op)
             except Exception as err:
                 _LOGGER.error("Login test mislukt: %s", err)
                 errors["base"] = "invalid_auth"
