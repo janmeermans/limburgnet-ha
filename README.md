@@ -13,10 +13,24 @@ Displays waste collection data from [Limburg.net](https://limburg.net) as sensor
 | `sensor.limburg_net_restfractie_huisvuil` | Weight of last residual waste collection (kg) |
 | `sensor.limburg_net_gft_groente_fruit_tuin` | Weight of last GFT collection (kg) |
 
-Attributes per sensor:
-- `datum` — date and time of the collection
-- `betaald_bedrag` — amount paid in euro
+Attributes per weight sensor:
+- `datum` — date and time of the last collection
+- `datum_iso` — ISO timestamp of the last collection
+- `betaald_bedrag` — amount paid for the last collection (euro)
 - `prijs_per_kg` — price per kg
+- `fractie` — fraction key (`restfractie` / `gft`)
+- `kosten_dit_jaar` — sum of paid amounts for this fraction in the current calendar year (euro)
+- `recente_ledigingen` — up to 12 most recent emptyings (`datum_iso`, `gewicht_kg`, `betaald_bedrag`)
+
+### Yearly costs (house-to-house)
+
+| Sensor | Description |
+|--------|-------------|
+| `sensor.limburg_net_kosten_jaar_restfractie_huisvuil` | Residual waste cost total this calendar year (EUR) |
+| `sensor.limburg_net_kosten_jaar_gft_groente_fruit_tuin` | GFT cost total this calendar year (EUR) |
+| `sensor.limburg_net_kosten_jaar_totaal` | Combined house-to-house cost total this calendar year (EUR) |
+
+These monetary sensors use `device_class: monetary`, unit `EUR`, and `state_class: total`. Values are derived from the full ledigingen history returned by Limburg.net (not only the last emptying).
 
 ### Recycling park quota
 
