@@ -294,11 +294,13 @@ class LimburgNetOpenstaandSensor(CoordinatorEntity, SensorEntity):
         openstaand = _rekenstaat(self.coordinator.data).get("openstaand") or {}
         bewegingen = _rekenstaat(self.coordinator.data).get("bewegingen") or []
         timeline = _rekenstaat(self.coordinator.data).get("timeline") or []
+        per_jaar = _rekenstaat(self.coordinator.data).get("bewegingen_per_jaar")
         return {
             "datum_laatste_update": openstaand.get("datum_laatste_update"),
             "rekening_nummer": openstaand.get("rekening_nummer"),
             "recente_bewegingen": bewegingen[:12],
             "timeline": timeline[:12],
+            "bewegingen_per_jaar": per_jaar,
         }
 
     @property

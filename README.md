@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-Displays waste collection and account data from [Limburg.net](https://limburg.net) / Mijn limburg.net as sensors in Home Assistant.
+Displays waste collection and account data (v0.2.1+ uses correct `/afvalbelasting/...` and `/saldo/...` API paths from limnet.js) from [Limburg.net](https://limburg.net) / Mijn limburg.net as sensors in Home Assistant.
 
 ## Sensors
 

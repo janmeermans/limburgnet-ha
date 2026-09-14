@@ -18,14 +18,17 @@ FRACTIE_NAMEN = {
 # Containerpark quota API
 RECYCLEPARK_QUOTA_URL = f"{API_PROXY}/recyclagepark/quotum/fracties"
 
-# Rekenstaat / afvalbelasting
-REKENSTAAT_OPENSTAAND_URL = f"{API_PROXY}/rekenstaat/totaal-openstaand"
-REKENSTAAT_HUIDIG_SALDO_URL = f"{API_PROXY}/rekenstaat/huidig-saldo"
-REKENSTAAT_BEWEGINGEN_URL = f"{API_PROXY}/rekenstaat/bewegingen"
-REKENSTAAT_TIMELINE_URL = f"{API_PROXY}/rekenstaat/bewegingen-timeline"
-REKENSTAAT_DIRECTE_INNING_URL = f"{API_PROXY}/rekenstaat/saldo-directe-inning"
-KOHIER_ARTIKEL_URL = f"{API_PROXY}/kohier-artikel"
-AANSLAGBILJETTEN_URL = f"{API_PROXY}/aanslagbiljetten"
+# Saldo / afvalbelasting — paths from limnet.js authorizedRequest()
+HUIDIG_SALDO_URL = f"{API_PROXY}/huidig-saldo"
+SALDO_BEWEGINGEN_URL = f"{API_PROXY}/saldo/bewegingen"
+SALDO_TIMELINE_URL = f"{API_PROXY}/saldo/bewegingen-timeline"
+SALDO_BEWEGINGEN_JAAR_URL = f"{API_PROXY}/saldo/bewegingen-per-jaar"
+OPENSTAAND_URL = f"{API_PROXY}/afvalbelasting/saldo/totaal-openstaand"
+KOHIER_ARTIKEL_URL = f"{API_PROXY}/afvalbelasting/kohier-artikel"
+# Detail endpoints need kohier/aanslag id:
+#   /afvalbelasting/kohier-artikel/{id}/aanslagbiljetten
+#   /afvalbelasting/kohier-artikel/{id}/saldo-directe-inning
+#   /afvalbelasting/aanslagbiljet/{id}
 
 # Park & slimmesorteerpunten
 PARKBEZOEK_HISTORIEK_URL = f"{API_PROXY}/parkbezoek-historiek"
