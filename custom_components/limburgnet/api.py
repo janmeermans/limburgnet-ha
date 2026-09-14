@@ -483,7 +483,11 @@ class LimburgNetAPI:
 
 
     def _parse_bewegingen(self, data) -> list:
-        """Flatten saldo/bewegingen(+timeline) which may be grouped by rekenstaat."""
+        """Flatten saldo/bewegingen(+timeline) grouped by rekenstaat.
+
+        Timeline items: {datum, omschrijving, bedrag}
+        Bewegingen items: {beweging: {datum, bedrag, ...}, details: [{omschrijving, ...}]}
+        """
         groups: list = []
         if isinstance(data, list):
             groups = data
@@ -491,12 +495,8 @@ class LimburgNetAPI:
             if any(k in data for k in ("timeline", "historiek", "bewegingen")):
                 groups = [data]
             else:
-                groups = (
-                    data.get("results")
-                    or data.get("items")
-                    or data.get("data")
-                    or []
-                )
+                groups = data.get("results") or data.get("items") or data.get("data") or []
+
         result = []
         for group in groups if isinstance(groups, list) else []:
             if not isinstance(group, dict):
@@ -510,20 +510,38 @@ class LimburgNetAPI:
                 or group.get("items")
                 or []
             )
-            # single flat item?
-            if not items and (_pick(group, "datum", "omschrijving", "bedrag") is not None):
+            if not items and (_pick(group, "datum", "omschrijving", "bedrag", "beweging") is not None):
                 items = [group]
             if not isinstance(items, list):
                 continue
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                result.append({
-                    "datum": _pick(item, "datum", "date", "datumIso", "datum_iso"),
-                    "bedrag": _to_float(_pick(item, "bedrag", "amount", "totaalBedrag")),
-                    "omschrijving": _pick(item, "omschrijving", "beschrijving", "description", "titel", "type"),
-                    "rekenstaat_code": code,
-                })
+                # /saldo/bewegingen nested shape
+                if isinstance(item.get("beweging"), dict):
+                    b = item["beweging"]
+                    details = item.get("details") if isinstance(item.get("details"), list) else []
+                    omschrijving = None
+                    for d in details:
+                        if isinstance(d, dict) and d.get("omschrijving"):
+                            omschrijving = d.get("omschrijving")
+                            break
+                    result.append({
+                        "datum": _pick(b, "datum", "date"),
+                        "bedrag": _to_float(_pick(b, "bedrag", "amount", "mutatieSaldo")),
+                        "omschrijving": omschrijving or _pick(b, "omschrijving", "activiteit", "type"),
+                        "oud_saldo": _to_float(_pick(b, "oudSaldo")),
+                        "nieuw_saldo": _to_float(_pick(b, "nieuwSaldo")),
+                        "rekenstaat_code": code,
+                        "details_count": len(details),
+                    })
+                else:
+                    result.append({
+                        "datum": _pick(item, "datum", "date", "datumIso", "datum_iso"),
+                        "bedrag": _to_float(_pick(item, "bedrag", "amount", "totaalBedrag", "mutatieSaldo")),
+                        "omschrijving": _pick(item, "omschrijving", "beschrijving", "description", "titel", "type"),
+                        "rekenstaat_code": code,
+                    })
                 if len(result) >= 25:
                     return result
         return result
@@ -618,52 +636,82 @@ class LimburgNetAPI:
         }
 
     def _parse_parkbezoeken(self, data) -> dict:
-        rekening_nummer = None
-        if isinstance(data, list):
-            records = data
-        elif isinstance(data, dict):
-            rekening = data.get("rekening") if isinstance(data.get("rekening"), dict) else {}
-            rn = rekening.get("rekeningNummer") or data.get("rekeningNummer")
-            if isinstance(rn, str):
-                rekening_nummer = rn.strip() or None
-            records = (
-                data.get("historiekRecords")
-                or data.get("historiek")
-                or data.get("records")
-                or data.get("items")
-                or []
-            )
-        else:
-            records = []
+        """Parse /parkbezoek-historiek.
 
-        # historiekRecords can be a list of groups (each a list) or flat list of dicts
+        API returns a list of per-rekening groups:
+          [{ rekening: {rekeningNummer}, historiekRecords: [row|group...] }, ...]
+        """
+        groups: list = []
+        if isinstance(data, list):
+            groups = data
+        elif isinstance(data, dict):
+            groups = [data]
+        else:
+            groups = []
+
+        rekening_nummer = None
         flat: list[dict] = []
-        for entry in records if isinstance(records, list) else []:
-            if isinstance(entry, list):
-                for row in entry:
-                    if isinstance(row, dict):
-                        flat.append(row)
-            elif isinstance(entry, dict):
-                flat.append(entry)
+
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            rekening = group.get("rekening") if isinstance(group.get("rekening"), dict) else {}
+            rn = rekening.get("rekeningNummer") or group.get("rekeningNummer")
+            if isinstance(rn, str) and rn.strip():
+                if rekening_nummer is None:
+                    rekening_nummer = rn.strip()
+
+            records = (
+                group.get("historiekRecords")
+                or group.get("historiek")
+                or group.get("records")
+                or group.get("items")
+            )
+            # If this dict itself looks like a visit row, keep it
+            if records is None and any(
+                k in group for k in ("datumParkbezoek", "activiteit", "hoeveelheid", "opgehaaldeKgs")
+            ):
+                records = [group]
+            if records is None:
+                continue
+            if not isinstance(records, list):
+                continue
+
+            for entry in records:
+                if isinstance(entry, list):
+                    for row in entry:
+                        if isinstance(row, dict):
+                            flat.append(row)
+                elif isinstance(entry, dict):
+                    # nested historiekRecords inside type groups
+                    nested = entry.get("historiekRecords")
+                    if isinstance(nested, list) and not any(
+                        k in entry for k in ("datumParkbezoek", "activiteit", "hoeveelheid")
+                    ):
+                        for row in nested:
+                            if isinstance(row, dict):
+                                flat.append(row)
+                    else:
+                        flat.append(entry)
 
         recente = []
         for item in flat:
             gewicht = _to_float(_pick(item, "opgehaaldeKgs", "gewicht", "gewichtKg", "hoeveelheid"))
             recente.append({
                 "datum": _pick(item, "datumParkbezoek", "datum", "date", "datumIso"),
-                "activiteit": _pick(item, "activiteit", "activity", "event", "rule", "fractie"),
+                "activiteit": _pick(item, "activiteit", "activity", "event", "rule", "fractie", "omschrijving"),
                 "gewicht_kg": gewicht,
                 "bedrag": _to_float(_pick(item, "bedrag", "amount", "totaalBedrag")),
                 "kaart": _pick(item, "kaart"),
                 "eenheid": _pick(item, "eenheid"),
                 "event": _pick(item, "eventNummer", "event", "eventType"),
+                "raw_keys": sorted(item.keys())[:20],
             })
 
-        # newest first if dates sortable
         def sort_key(item: dict):
             raw = item.get("datum") or ""
             try:
-                from datetime import datetime, timezone
+                from datetime import datetime
                 return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
             except Exception:
                 return str(raw)
@@ -685,12 +733,22 @@ class LimburgNetAPI:
             if y == jaar and item.get("bedrag") is not None:
                 kosten += float(item["bedrag"])
 
+        # Prefer a "header" row with datum for native_value
+        laatste = None
+        for item in recente_sorted:
+            if item.get("datum") or item.get("gewicht_kg") is not None or item.get("bedrag") is not None:
+                laatste = item
+                break
+        if laatste is None and recente_sorted:
+            laatste = recente_sorted[0]
+
         return {
             "recente": recente_sorted[:12],
-            "laatste": recente_sorted[0] if recente_sorted else None,
+            "laatste": laatste,
             "kosten_dit_jaar": round(kosten, 2),
             "aantal": len(recente_sorted),
             "rekening_nummer": rekening_nummer,
+            "groepen": len(groups),
         }
 
 
