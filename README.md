@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-Displays waste collection data from [Limburg.net](https://limburg.net) as sensors in Home Assistant. Supports both house-to-house collections and recycling park quota.
+Displays waste collection and account data from [Limburg.net](https://limburg.net) / Mijn limburg.net as sensors in Home Assistant.
 
 ## Sensors
 
@@ -13,43 +13,50 @@ Displays waste collection data from [Limburg.net](https://limburg.net) as sensor
 | `sensor.limburg_net_restfractie_huisvuil` | Weight of last residual waste collection (kg) |
 | `sensor.limburg_net_gft_groente_fruit_tuin` | Weight of last GFT collection (kg) |
 
-Attributes per weight sensor:
-- `datum` — date and time of the last collection
-- `datum_iso` — ISO timestamp of the last collection
-- `betaald_bedrag` — amount paid for the last collection (euro)
-- `prijs_per_kg` — price per kg
-- `fractie` — fraction key (`restfractie` / `gft`)
-- `kosten_dit_jaar` — sum of paid amounts for this fraction in the current calendar year (euro)
-- `recente_ledigingen` — up to 12 most recent emptyings (`datum_iso`, `gewicht_kg`, `betaald_bedrag`)
+Attributes per weight sensor: `datum`, `datum_iso`, `betaald_bedrag`, `prijs_per_kg`, `fractie`, `kosten_dit_jaar`, `recente_ledigingen` (max 12).
 
 ### Yearly costs (house-to-house)
 
 | Sensor | Description |
 |--------|-------------|
-| `sensor.limburg_net_kosten_jaar_restfractie_huisvuil` | Residual waste cost total this calendar year (EUR) |
-| `sensor.limburg_net_kosten_jaar_gft_groente_fruit_tuin` | GFT cost total this calendar year (EUR) |
-| `sensor.limburg_net_kosten_jaar_totaal` | Combined house-to-house cost total this calendar year (EUR) |
+| `sensor.limburg_net_kosten_jaar_restfractie_huisvuil` | Residual waste cost this calendar year (EUR) |
+| `sensor.limburg_net_kosten_jaar_gft_groente_fruit_tuin` | GFT cost this calendar year (EUR) |
+| `sensor.limburg_net_kosten_jaar_totaal` | Combined house-to-house cost this year (EUR) |
 
-These monetary sensors use `device_class: monetary`, unit `EUR`, and `state_class: total`. Values are derived from the full ledigingen history returned by Limburg.net (not only the last emptying).
+### Billing / afvalbelasting / rekenstaat
 
-### Recycling park quota
-
-One sensor per fraction, showing the **remaining quota**:
-
-| Sensor (example) | Description |
+| Sensor | Description |
 |--------|-------------|
-| `sensor.limburg_net_quota_tuinafval` | Remaining garden waste quota (kg) |
-| `sensor.limburg_net_quota_zuiver_steenpuin` | Remaining clean rubble quota (kg) |
-| `sensor.limburg_net_quota_asbest` | Remaining asbestos quota (kg) |
+| `sensor.limburg_net_openstaand_bedrag` | Outstanding amount (EUR); attrs include recent movements/timeline |
+| `sensor.limburg_net_huidig_saldo` | Current account balance (EUR) |
+| `sensor.limburg_net_saldo_directe_inning` | Direct debit balance (EUR) |
+| `sensor.limburg_net_aanslagbiljetten` | Count of aanslagbiljetten; attrs: betaald/onvolledig/overgedragen, recente, payment_reference |
+| `sensor.limburg_net_kohier_huidig_jaar` | Kohier article amount(s) for current year (EUR) |
 
-The number of quota sensors depends on your municipality's configuration.
+### Recycling park
 
-Attributes per quota sensor:
-- `totaal_quota` — total quota
-- `gebruikt` — amount already used
-- `eenheid` — unit (kg, pieces, ...)
-- `tarief_bedrag` — price per unit above quota
-- `quotum_nummer` — quota number
+Quota sensors (one per fraction, remaining quota) plus:
+
+| Sensor | Description |
+|--------|-------------|
+| `sensor.limburg_net_parkbezoek_laatste_gewicht` | Last park visit weight (kg); attrs: recente_bezoeken |
+| `sensor.limburg_net_parkbezoek_kosten_jaar` | Park visit costs this calendar year (EUR) |
+
+### Slimmesorteerpunten
+
+| Sensor | Description |
+|--------|-------------|
+| `sensor.limburg_net_slimmesorteerpunten_saldo` | Points balance; attrs: historiek, acties (may be empty) |
+
+### Ophaling overzicht
+
+| Sensor | Description |
+|--------|-------------|
+| `sensor.limburg_net_ophaling_overzicht` | Count of overview items; attrs: items |
+
+Entity IDs may vary slightly depending on Home Assistant slugification of the Dutch names.
+
+> Collection calendar / next pickup is **not** included here — use [Afvalbeheer](https://github.com/pippyn/Home-Assistant-Sensor-Afvalbeheer), `aiolimburgnet`, or `waste_collection_schedule` with the public Limburg.net calendar API.
 
 ## Installation via HACS
 
@@ -78,8 +85,6 @@ Attributes per quota sensor:
 | Password | ✅ | Your limburg.net password |
 
 <img width="352" height="668" alt="image" src="https://github.com/user-attachments/assets/e3e6c16f-8259-4091-aabb-c36c6af1d983" />
-
-
 
 ## Issues?
 
