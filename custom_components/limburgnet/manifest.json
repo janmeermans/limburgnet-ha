@@ -1,7 +1,7 @@
 {
   "domain": "limburgnet",
   "name": "Limburg.net Afvalophaling",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "documentation": "https://github.com/janmeermans/limburgnet-ha",
   "issue_tracker": "https://github.com/janmeermans/limburgnet-ha/issues",
   "requirements": ["requests>=2.28.0"],
