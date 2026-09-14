@@ -328,6 +328,8 @@ class LimburgNetHuidigSaldoSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         saldo = _rekenstaat(self.coordinator.data).get("huidig_saldo") or {}
         return {
+            "rekening_nummer": saldo.get("rekening_nummer"),
+            "datum_laatste_update": saldo.get("datum_laatste_update"),
             "minimum_saldo": saldo.get("minimum_saldo"),
             "saldo_lijst": saldo.get("saldo_lijst") or [],
         }
@@ -359,6 +361,7 @@ class LimburgNetDirecteInningSensor(CoordinatorEntity, SensorEntity):
         return {
             "rekening_nummer": item.get("rekening_nummer"),
             "rekenstaat": item.get("rekenstaat"),
+            "datum_laatste_update": item.get("datum_laatste_update"),
         }
 
     @property
@@ -486,7 +489,9 @@ class LimburgNetParkbezoekLaatsteSensor(CoordinatorEntity, SensorEntity):
             "datum": laatste.get("datum"),
             "activiteit": laatste.get("activiteit"),
             "bedrag": laatste.get("bedrag"),
+            "kaart": laatste.get("kaart"),
             "event": laatste.get("event"),
+            "rekening_nummer": park.get("rekening_nummer"),
             "recente_bezoeken": park.get("recente") or [],
             "aantal": park.get("aantal"),
         }

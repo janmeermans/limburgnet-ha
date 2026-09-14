@@ -409,75 +409,148 @@ class LimburgNetAPI:
     def _parse_openstaand(self, data) -> dict:
         if not isinstance(data, dict):
             data = {}
+        rekening = _pick(data, "rekeningNummer", "rekeningnummer", "iban")
+        if isinstance(rekening, str):
+            rekening = rekening.strip() or None
         return {
-            "totaal_bedrag": _to_float(_pick(data, "totaalBedrag", "totaal", "bedrag", "amount")),
+            "totaal_bedrag": _to_float(_pick(data, "totaalBedrag", "totaal", "bedrag", "amount", "saldoRekenstaat")),
             "datum_laatste_update": _pick(data, "datumLaatsteUpdate", "laatsteUpdate", "updatedAt"),
-            "rekening_nummer": _pick(data, "rekeningNummer", "rekeningnummer", "iban"),
-            "raw_keys": sorted(list(data.keys()))[:20],
+            "rekening_nummer": rekening,
         }
+
 
     def _parse_huidig_saldo(self, data) -> dict:
         if isinstance(data, list):
-            saldo_lijst = data
             root = {"saldoLijst": data}
+            saldo_lijst = data
         elif isinstance(data, dict):
             root = data
             saldo_lijst = data.get("saldoLijst") or data.get("saldi") or []
         else:
             root, saldo_lijst = {}, []
-        bedragen = []
-        for item in saldo_lijst if isinstance(saldo_lijst, list) else []:
-            if isinstance(item, dict):
-                val = _to_float(_pick(item, "saldo", "bedrag", "amount", "value"))
-                if val is not None:
-                    bedragen.append(val)
-        hoofd = _to_float(_pick(root, "saldo", "huidigSaldo", "bedrag", "amount"))
-        if hoofd is None and bedragen:
-            hoofd = bedragen[0]
-        return {
-            "saldo": hoofd,
-            "saldo_lijst": saldo_lijst if isinstance(saldo_lijst, list) else [],
-            "minimum_saldo": _pick(root, "minimumSaldo", "minimum", "drempel"),
-        }
 
-    def _parse_bewegingen(self, data) -> list:
-        if isinstance(data, list):
-            items = data
-        elif isinstance(data, dict):
-            items = (
-                data.get("bewegingen")
-                or data.get("timeline")
-                or data.get("historiek")
-                or data.get("items")
-                or data.get("rekenstaat")
-                or []
-            )
-            if isinstance(items, dict):
-                items = items.get("bewegingen") or items.get("items") or []
-        else:
-            items = []
-        result = []
-        for item in items if isinstance(items, list) else []:
+        if not isinstance(saldo_lijst, list):
+            saldo_lijst = []
+
+        gekozen = None
+        for item in saldo_lijst:
+            if isinstance(item, dict) and item.get("eerstGetoond"):
+                gekozen = item
+                break
+        if gekozen is None:
+            for item in saldo_lijst:
+                if isinstance(item, dict):
+                    gekozen = item
+                    break
+
+        saldo = None
+        rekening = None
+        datum = None
+        if gekozen:
+            saldo = _to_float(_pick(gekozen, "saldoRekenstaat", "saldo", "bedrag", "amount", "value"))
+            rekening = _pick(gekozen, "rekeningNummer", "rekeningnummer")
+            datum = _pick(gekozen, "datumLaatsteUpdate", "datum")
+        if saldo is None:
+            saldo = _to_float(_pick(root, "saldo", "huidigSaldo", "bedrag", "amount", "saldoRekenstaat"))
+        if isinstance(rekening, str):
+            rekening = rekening.strip() or None
+
+        compact_lijst = []
+        for item in saldo_lijst:
             if not isinstance(item, dict):
                 continue
-            result.append({
-                "datum": _pick(item, "datum", "date", "datumIso", "datum_iso"),
-                "bedrag": _to_float(_pick(item, "bedrag", "amount", "totaalBedrag")),
-                "omschrijving": _pick(item, "omschrijving", "beschrijving", "description", "titel", "type"),
-                "type": _pick(item, "type", "bewegingType", "eventType"),
+            rn = item.get("rekeningNummer")
+            if isinstance(rn, str):
+                rn = rn.strip()
+            compact_lijst.append({
+                "saldo_rekenstaat": _to_float(_pick(item, "saldoRekenstaat", "saldo")),
+                "rekening_nummer": rn,
+                "eerst_getoond": bool(item.get("eerstGetoond")),
+                "datum_laatste_update": _pick(item, "datumLaatsteUpdate", "datum"),
             })
-            if len(result) >= 25:
-                break
+
+        return {
+            "saldo": saldo,
+            "rekening_nummer": rekening,
+            "datum_laatste_update": datum or _pick(root, "datumLaatsteUpdate"),
+            "saldo_lijst": compact_lijst,
+            "minimum_saldo": {
+                "rest": _to_float(root.get("minimumSaldoRestLediging")),
+                "gft": _to_float(root.get("minimumSaldoGftLediging")),
+                "park": _to_float(root.get("minimumSaldoVoorParkbezoek")),
+            },
+        }
+
+
+    def _parse_bewegingen(self, data) -> list:
+        """Flatten saldo/bewegingen(+timeline) which may be grouped by rekenstaat."""
+        groups: list = []
+        if isinstance(data, list):
+            groups = data
+        elif isinstance(data, dict):
+            if any(k in data for k in ("timeline", "historiek", "bewegingen")):
+                groups = [data]
+            else:
+                groups = (
+                    data.get("results")
+                    or data.get("items")
+                    or data.get("data")
+                    or []
+                )
+        result = []
+        for group in groups if isinstance(groups, list) else []:
+            if not isinstance(group, dict):
+                continue
+            rekenstaat = group.get("rekenstaat") if isinstance(group.get("rekenstaat"), dict) else {}
+            code = rekenstaat.get("rekenstaatCode") or group.get("rekenstaatCode")
+            items = (
+                group.get("timeline")
+                or group.get("historiek")
+                or group.get("bewegingen")
+                or group.get("items")
+                or []
+            )
+            # single flat item?
+            if not items and (_pick(group, "datum", "omschrijving", "bedrag") is not None):
+                items = [group]
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                result.append({
+                    "datum": _pick(item, "datum", "date", "datumIso", "datum_iso"),
+                    "bedrag": _to_float(_pick(item, "bedrag", "amount", "totaalBedrag")),
+                    "omschrijving": _pick(item, "omschrijving", "beschrijving", "description", "titel", "type"),
+                    "rekenstaat_code": code,
+                })
+                if len(result) >= 25:
+                    return result
         return result
+
 
     def _parse_directe_inning(self, data) -> dict:
         if not isinstance(data, dict):
             data = {}
+        rekening = _pick(data, "rekeningNummer", "rekeningnummer", "iban", "accountNumber")
+        if isinstance(rekening, str):
+            rekening = rekening.strip() or None
         return {
-            "saldo": _to_float(_pick(data, "saldo", "bedrag", "balance", "amount", "huidigSaldo")),
-            "rekening_nummer": _pick(data, "rekeningNummer", "rekeningnummer", "iban", "accountNumber"),
-            "rekenstaat": _pick(data, "rekenstaat", "rekenstaatNummer", "nummer"),
+            "saldo": _to_float(_pick(
+                data,
+                "saldoOpDezeRekenstaat",
+                "saldo",
+                "bedrag",
+                "balance",
+                "amount",
+                "huidigSaldo",
+                "saldoRekenstaat",
+            )),
+            "rekening_nummer": rekening,
+            "datum_laatste_update": _pick(data, "datumLaatsteUpdate", "laatsteUpdate"),
+            "rekenstaat": _pick(data, "rekenstaat", "rekenstaatNummer", "nummer", "rekenstaatCode"),
         }
+
 
     def _parse_kohier(self, data) -> list:
         items = data if isinstance(data, list) else (data.get("items") if isinstance(data, dict) else []) or []
@@ -545,42 +618,81 @@ class LimburgNetAPI:
         }
 
     def _parse_parkbezoeken(self, data) -> dict:
+        rekening_nummer = None
         if isinstance(data, list):
             records = data
         elif isinstance(data, dict):
-            records = data.get("historiekRecords") or data.get("historiek") or data.get("records") or data.get("items") or []
+            rekening = data.get("rekening") if isinstance(data.get("rekening"), dict) else {}
+            rn = rekening.get("rekeningNummer") or data.get("rekeningNummer")
+            if isinstance(rn, str):
+                rekening_nummer = rn.strip() or None
+            records = (
+                data.get("historiekRecords")
+                or data.get("historiek")
+                or data.get("records")
+                or data.get("items")
+                or []
+            )
         else:
             records = []
+
+        # historiekRecords can be a list of groups (each a list) or flat list of dicts
+        flat: list[dict] = []
+        for entry in records if isinstance(records, list) else []:
+            if isinstance(entry, list):
+                for row in entry:
+                    if isinstance(row, dict):
+                        flat.append(row)
+            elif isinstance(entry, dict):
+                flat.append(entry)
+
         recente = []
-        for item in records if isinstance(records, list) else []:
-            if not isinstance(item, dict):
-                continue
+        for item in flat:
+            gewicht = _to_float(_pick(item, "opgehaaldeKgs", "gewicht", "gewichtKg", "hoeveelheid"))
             recente.append({
-                "datum": _pick(item, "datum", "date", "datumIso"),
+                "datum": _pick(item, "datumParkbezoek", "datum", "date", "datumIso"),
                 "activiteit": _pick(item, "activiteit", "activity", "event", "rule", "fractie"),
-                "gewicht_kg": _to_float(_pick(item, "kg", "gewicht", "gewichtKg", "opgehaaldeKgs")),
+                "gewicht_kg": gewicht,
                 "bedrag": _to_float(_pick(item, "bedrag", "amount", "totaalBedrag")),
-                "event": _pick(item, "event", "eventType", "rule"),
+                "kaart": _pick(item, "kaart"),
+                "eenheid": _pick(item, "eenheid"),
+                "event": _pick(item, "eventNummer", "event", "eventType"),
             })
+
+        # newest first if dates sortable
+        def sort_key(item: dict):
+            raw = item.get("datum") or ""
+            try:
+                from datetime import datetime, timezone
+                return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except Exception:
+                return str(raw)
+
+        recente_sorted = sorted(recente, key=sort_key, reverse=True)
+
+        from datetime import datetime
         jaar = datetime.now().year
         kosten = 0.0
-        for item in recente:
+        for item in recente_sorted:
             raw = item.get("datum") or ""
             try:
                 y = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).year
-            except (ValueError, TypeError):
+            except Exception:
                 try:
                     y = int(str(raw)[:4])
-                except ValueError:
+                except Exception:
                     y = None
             if y == jaar and item.get("bedrag") is not None:
                 kosten += float(item["bedrag"])
+
         return {
-            "recente": recente[:12],
-            "laatste": recente[0] if recente else None,
+            "recente": recente_sorted[:12],
+            "laatste": recente_sorted[0] if recente_sorted else None,
             "kosten_dit_jaar": round(kosten, 2),
-            "aantal": len(recente),
+            "aantal": len(recente_sorted),
+            "rekening_nummer": rekening_nummer,
         }
+
 
     def _parse_punten_saldo(self, data) -> float | None:
         if isinstance(data, (int, float)):
