@@ -48,7 +48,13 @@ class LimburgNetAPI:
                 data   = self._haal_ledigingen_op(token, fractie)
                 leging = self._parse_laatste_leging(data, fractie)
                 resultaat["ledigingen"][fractie] = leging
-                _LOGGER.debug("✅ leging %s: %s kg op %s", fractie, leging["gewicht_kg"], leging["datum"])
+                _LOGGER.debug(
+                    "✅ leging %s: %s kg op %s (%d in historie)",
+                    fractie,
+                    leging["gewicht_kg"],
+                    leging["datum"],
+                    len(leging.get("historie") or []),
+                )
             except Exception as err:
                 _LOGGER.error("Fout bij ophalen leging %s: %s", fractie, err)
                 resultaat["ledigingen"][fractie] = None
@@ -135,8 +141,8 @@ class LimburgNetAPI:
         except json.JSONDecodeError as err:
             raise ValueError(f"Ongeldig antwoord voor {fractie}") from err
 
-    def _parse_laatste_leging(self, data: list | dict, fractie: str) -> dict:
-        """Extraheer de meest recente leging uit de API-response."""
+    def _extract_ledigingen_lijst(self, data: list | dict, fractie: str) -> list:
+        """Haal de ruwe lijst van ledigingen uit de API-response."""
         if isinstance(data, list):
             if not data:
                 raise ValueError(f"Geen data voor {fractie}")
@@ -152,17 +158,11 @@ class LimburgNetAPI:
 
         if not ledigingen:
             raise ValueError(f"Geen ledigingen voor {fractie}")
+        return ledigingen
 
-        def datum_key(item: dict) -> datetime:
-            raw = item.get("datum") or ""
-            try:
-                return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                return datetime.min.replace(tzinfo=timezone.utc)
-
-        laatste = sorted(ledigingen, key=datum_key, reverse=True)[0]
-
-        datum_raw = laatste.get("datum") or ""
+    def _parse_leging_item(self, item: dict, fractie: str) -> dict:
+        """Parse één lediging tot een genormaliseerd dict."""
+        datum_raw = item.get("datum") or ""
         try:
             dt        = datetime.fromisoformat(datum_raw.replace("Z", "+00:00"))
             datum_str = dt.strftime("%d/%m/%Y %H:%M")
@@ -173,21 +173,21 @@ class LimburgNetAPI:
 
         try:
             gewicht_kg = round(float(
-                laatste.get("opgehaaldeKgs") or laatste.get("opgehaaldGewicht") or 0
+                item.get("opgehaaldeKgs") or item.get("opgehaaldGewicht") or 0
             ), 2)
         except (TypeError, ValueError):
             gewicht_kg = 0.0
 
         try:
-            bedrag_raw = laatste.get("bedrag")
+            bedrag_raw = item.get("bedrag")
             if bedrag_raw is None:
-                bedrag_raw = laatste.get("totaalBedrag") or 0
+                bedrag_raw = item.get("totaalBedrag") or 0
             bedrag = round(float(bedrag_raw), 2)
         except (TypeError, ValueError):
             bedrag = 0.0
 
         try:
-            prijs_per_kg = float(laatste.get("prijsPerKgs") or laatste.get("prijsPerKg") or 0.0)
+            prijs_per_kg = float(item.get("prijsPerKgs") or item.get("prijsPerKg") or 0.0)
         except (TypeError, ValueError):
             prijs_per_kg = 0.0
 
@@ -199,6 +199,24 @@ class LimburgNetAPI:
             "prijs_per_kg":   prijs_per_kg,
             "fractie":        fractie,
         }
+
+    def _parse_laatste_leging(self, data: list | dict, fractie: str) -> dict:
+        """Extraheer de meest recente leging plus volledige historie."""
+        ruwe = self._extract_ledigingen_lijst(data, fractie)
+
+        def datum_key(item: dict) -> datetime:
+            raw = item.get("datum") or ""
+            try:
+                return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                return datetime.min.replace(tzinfo=timezone.utc)
+
+        gesorteerd = sorted(ruwe, key=datum_key, reverse=True)
+        historie = [self._parse_leging_item(item, fractie) for item in gesorteerd]
+
+        laatste = dict(historie[0])
+        laatste["historie"] = historie
+        return laatste
 
     # ── CONTAINERPARK QUOTA ──────────────────────────────────────
 
