@@ -8,13 +8,99 @@
           "email": "E-mailadres",
           "password": "Wachtwoord"
         }
+      },
+      "gemeente": {
+        "title": "Gemeente zoeken",
+        "description": "Zoek je gemeente voor de ophalingkalender (bijv. Example)",
+        "data": {
+          "gemeente": "Gemeente"
+        }
+      },
+      "gemeente_select": {
+        "title": "Gemeente kiezen",
+        "description": "Meerdere gemeenten gevonden — kies de juiste",
+        "data": {
+          "nis_code": "Gemeente"
+        }
+      },
+      "straat": {
+        "title": "Straat zoeken",
+        "description": "Zoek je straat in {gemeente}",
+        "data": {
+          "straat": "Straat"
+        }
+      },
+      "straat_select": {
+        "title": "Straat kiezen",
+        "description": "Meerdere straten gevonden — kies de juiste",
+        "data": {
+          "straat_nummer": "Straat"
+        }
+      },
+      "huisnummer": {
+        "title": "Huisnummer",
+        "description": "Adres: {straat}, {gemeente}",
+        "data": {
+          "huisnummer": "Huisnummer",
+          "toevoeging": "Toevoeging (optioneel)"
+        }
       }
     },
     "error": {
-      "invalid_auth": "Inloggen mislukt. Controleer je e-mailadres en wachtwoord."
+      "invalid_auth": "Inloggen mislukt. Controleer je e-mailadres en wachtwoord.",
+      "cannot_connect": "Kan limburg.net niet bereiken. Probeer later opnieuw.",
+      "gemeente_not_found": "Geen gemeente gevonden voor die zoekopdracht.",
+      "straat_not_found": "Geen straat gevonden in deze gemeente.",
+      "huisnummer_required": "Vul een huisnummer in."
     },
     "abort": {
       "already_configured": "Dit account is al geconfigureerd."
+    }
+  },
+  "options": {
+    "step": {
+      "gemeente": {
+        "title": "Kalender — gemeente",
+        "description": "Zoek of wijzig de gemeente voor de ophalingkalender",
+        "data": {
+          "gemeente": "Gemeente"
+        }
+      },
+      "gemeente_select": {
+        "title": "Gemeente kiezen",
+        "description": "Meerdere gemeenten gevonden — kies de juiste",
+        "data": {
+          "nis_code": "Gemeente"
+        }
+      },
+      "straat": {
+        "title": "Kalender — straat",
+        "description": "Zoek je straat in {gemeente}",
+        "data": {
+          "straat": "Straat"
+        }
+      },
+      "straat_select": {
+        "title": "Straat kiezen",
+        "description": "Meerdere straten gevonden — kies de juiste",
+        "data": {
+          "straat_nummer": "Straat"
+        }
+      },
+      "huisnummer": {
+        "title": "Kalender — huisnummer",
+        "description": "Adres: {straat}, {gemeente}",
+        "data": {
+          "huisnummer": "Huisnummer",
+          "toevoeging": "Toevoeging (optioneel)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan limburg.net niet bereiken. Probeer later opnieuw.",
+      "gemeente_not_found": "Geen gemeente gevonden voor die zoekopdracht.",
+      "straat_not_found": "Geen straat gevonden in deze gemeente.",
+      "huisnummer_required": "Vul een huisnummer in."
     }
   }
 }

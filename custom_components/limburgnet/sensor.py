@@ -14,8 +14,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, FRACTIES, FRACTIE_NAMEN
-from .coordinator import LimburgNetCoordinator
+from .const import (
+    DOMAIN,
+    FRACTIES,
+    FRACTIE_NAMEN,
+    KALENDER_FRACTIE_ICONS,
+)
+from .coordinator import LimburgNetCoordinator, calendar_config_from_entry
 
 DEVICE_INFO = {
     "identifiers": {(DOMAIN, "limburgnet")},
@@ -104,6 +109,18 @@ async def async_setup_entry(
     quota_lijst = data.get("quota") or []
     for quota in quota_lijst:
         entiteiten.append(LimburgNetQuotaSensor(coordinator, quota["fractie"]))
+
+    # Ophalingkalender: volgende ophaling per fractie + overall
+    if calendar_config_from_entry(entry):
+        kalender = data.get("kalender") or {}
+        fractie_slugs = list(kalender.get("fracties") or [])
+        # Ensure we always expose common fractions even before first full refresh
+        for slug in ("huisvuil", "keukenafval", "tuinafval", "pmd", "papier", "textiel"):
+            if slug not in fractie_slugs:
+                fractie_slugs.append(slug)
+        for slug in fractie_slugs:
+            entiteiten.append(LimburgNetVolgendeOphalingSensor(coordinator, slug))
+        entiteiten.append(LimburgNetVolgendeOphalingOverallSensor(coordinator))
 
     async_add_entities(entiteiten, update_before_add=True)
 
@@ -590,6 +607,155 @@ class LimburgNetOphalingOverzichtSensor(CoordinatorEntity, SensorEntity):
         if overzicht is None:
             return {}
         return {"items": overzicht if isinstance(overzicht, (list, dict)) else str(overzicht)}
+
+    @property
+    def device_info(self) -> dict:
+        return DEVICE_INFO
+
+
+
+# ---------------------------------------------------------------------------
+# Ophalingkalender sensors
+# ---------------------------------------------------------------------------
+
+def _kalender(data: dict | None) -> dict:
+    if not data:
+        return {}
+    return data.get("kalender") or {}
+
+
+class LimburgNetVolgendeOphalingSensor(CoordinatorEntity, SensorEntity):
+    """Volgende ophalingdatum voor één fractie."""
+
+    _attr_device_class = SensorDeviceClass.DATE
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator: LimburgNetCoordinator, fractie_slug: str) -> None:
+        super().__init__(coordinator)
+        self._slug = fractie_slug
+        self._attr_unique_id = f"limburgnet_volgende_{fractie_slug}"
+        label = fractie_slug.replace("_", " ").title()
+        self._attr_name = f"Limburg.net Volgende {label}"
+        self._attr_icon = KALENDER_FRACTIE_ICONS.get(fractie_slug, "mdi:calendar-clock")
+
+    def _event(self) -> dict | None:
+        nxt = _kalender(self.coordinator.data).get("next_by_fractie") or {}
+        return nxt.get(self._slug)
+
+    @property
+    def available(self) -> bool:
+        if not super().available:
+            return False
+        # Unavailable until we know this fraction exists in calendar
+        kal = _kalender(self.coordinator.data)
+        if not kal:
+            return False
+        fracties = kal.get("fracties") or []
+        return self._slug in fracties or self._event() is not None
+
+    @property
+    def native_value(self):
+        event = self._event()
+        if not event:
+            return None
+        raw = event.get("date")
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw).date() if "T" in raw else datetime.strptime(raw, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            try:
+                from datetime import date as date_cls
+                return date_cls.fromisoformat(raw[:10])
+            except Exception:
+                return None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        event = self._event()
+        kal = _kalender(self.coordinator.data)
+        upcoming = [
+            {"date": e.get("date"), "fractie": e.get("fractie")}
+            for e in (kal.get("upcoming") or [])
+            if e.get("fractie_slug") == self._slug
+        ][:8]
+        attrs = {
+            "fractie_slug": self._slug,
+            "upcoming": upcoming,
+        }
+        if event:
+            attrs.update({
+                "datum": event.get("date"),
+                "datum_iso": event.get("date_iso"),
+                "fractie": event.get("fractie"),
+                "type": event.get("type"),
+                "detail_url": event.get("detail_url"),
+            })
+        return attrs
+
+    @property
+    def device_info(self) -> dict:
+        return DEVICE_INFO
+
+
+class LimburgNetVolgendeOphalingOverallSensor(CoordinatorEntity, SensorEntity):
+    """Eerstvolgende ophaling (ongeacht fractie)."""
+
+    _attr_device_class = SensorDeviceClass.DATE
+    _attr_icon = "mdi:calendar-star"
+    _attr_unique_id = "limburgnet_volgende_ophaling"
+    _attr_name = "Limburg.net Volgende ophaling"
+
+    def __init__(self, coordinator: LimburgNetCoordinator) -> None:
+        super().__init__(coordinator)
+
+    def _event(self) -> dict | None:
+        return _kalender(self.coordinator.data).get("next_overall")
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(_kalender(self.coordinator.data))
+
+    @property
+    def native_value(self):
+        event = self._event()
+        if not event or not event.get("date"):
+            return None
+        raw = event["date"]
+        try:
+            from datetime import date as date_cls
+            return date_cls.fromisoformat(raw[:10])
+        except Exception:
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        event = self._event()
+        kal = _kalender(self.coordinator.data)
+        upcoming = [
+            {
+                "date": e.get("date"),
+                "fractie": e.get("fractie"),
+                "fractie_slug": e.get("fractie_slug"),
+            }
+            for e in (kal.get("upcoming") or [])[:12]
+        ]
+        attrs: dict = {"upcoming": upcoming}
+        if event:
+            attrs.update({
+                "datum": event.get("date"),
+                "datum_iso": event.get("date_iso"),
+                "fractie": event.get("fractie"),
+                "fractie_slug": event.get("fractie_slug"),
+                "type": event.get("type"),
+                "detail_url": event.get("detail_url"),
+            })
+        # next per fraction summary
+        next_by = kal.get("next_by_fractie") or {}
+        attrs["next_by_fractie"] = {
+            slug: ev.get("date") for slug, ev in next_by.items()
+        }
+        return attrs
 
     @property
     def device_info(self) -> dict:
