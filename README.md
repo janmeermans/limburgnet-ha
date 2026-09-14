@@ -2,11 +2,35 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-Displays waste collection and account data (v0.2.1+ uses correct `/afvalbelasting/...` and `/saldo/...` API paths from limnet.js) from [Limburg.net](https://limburg.net) / Mijn limburg.net as sensors in Home Assistant.
+Displays waste collection **calendar**, weights, and account data from [Limburg.net](https://limburg.net) / Mijn limburg.net as sensors (and a calendar entity) in Home Assistant.
+
+Account sensors (v0.2.1+) use the correct `/afvalbelasting/...` and `/saldo/...` API paths from limnet.js. Calendar support (v0.3.0+) uses the public Limburg.net afvalkalender API (no JWT).
 
 ## Sensors
 
-### House-to-house collections
+### Collection calendar (v0.3.0+)
+
+Configured during setup (or later via **Configure** / options) with gemeente → straat → huisnummer.
+
+| Sensor | Description |
+|--------|-------------|
+| `sensor.limburg_net_volgende_ophaling` | Next pickup date (any fraction); attrs: `fractie`, `upcoming`, `next_by_fractie` |
+| `sensor.limburg_net_volgende_huisvuil` | Next residual waste (huisvuil) date |
+| `sensor.limburg_net_volgende_keukenafval` | Next kitchen waste date |
+| `sensor.limburg_net_volgende_tuinafval` | Next garden waste date |
+| `sensor.limburg_net_volgende_pmd` | Next PMD date |
+| `sensor.limburg_net_volgende_papier` | Next paper & cardboard date |
+| `sensor.limburg_net_volgende_textiel` | Next textile date |
+
+Per-fraction sensors use `device_class: date`. Attributes include `datum`, `fractie`, `upcoming` (list). Fractions present depend on your municipality calendar.
+
+### Calendar entity
+
+| Entity | Description |
+|--------|-------------|
+| `calendar.limburg_net_ophalingen_…` | Upcoming house-to-house collections as calendar events |
+
+### House-to-house collections (account / weights)
 
 | Sensor | Description |
 |--------|-------------|
@@ -56,8 +80,6 @@ Quota sensors (one per fraction, remaining quota) plus:
 
 Entity IDs may vary slightly depending on Home Assistant slugification of the Dutch names.
 
-> Collection calendar / next pickup is **not** included here — use [Afvalbeheer](https://github.com/pippyn/Home-Assistant-Sensor-Afvalbeheer), `aiolimburgnet`, or `waste_collection_schedule` with the public Limburg.net calendar API.
-
 ## Installation via HACS
 
 1. Go to **HACS → Integrations** in Home Assistant
@@ -68,7 +90,7 @@ Entity IDs may vary slightly depending on Home Assistant slugification of the Du
 6. Search for **Limburg.net** and install
 7. Restart Home Assistant
 8. Go to **Settings → Devices & Services → Add Integration**
-9. Search for **Limburg.net** and follow the wizard
+9. Search for **Limburg.net** and follow the wizard (login → gemeente → straat → huisnummer)
 
 ## Manual installation
 
@@ -83,6 +105,12 @@ Entity IDs may vary slightly depending on Home Assistant slugification of the Du
 |-------|----------|-------------|
 | Email address | ✅ | Your limburg.net email address |
 | Password | ✅ | Your limburg.net password |
+| Gemeente | ✅ (calendar) | Municipality search (stored: `nis_code`, display name) |
+| Straat | ✅ (calendar) | Street search (stored: `straat_nummer`, display name) |
+| Huisnummer | ✅ (calendar) | House number |
+| Toevoeging | ❌ | Optional house number suffix |
+
+Existing installations can add or change the calendar address via **Settings → Devices & Services → Limburg.net → Configure**.
 
 <img width="352" height="668" alt="image" src="https://github.com/user-attachments/assets/e3e6c16f-8259-4091-aabb-c36c6af1d983" />
 

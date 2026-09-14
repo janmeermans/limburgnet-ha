@@ -12,12 +12,15 @@ from .const import (
     API_PROXY,
     BASE_URL,
     HUIDIG_SALDO_URL,
+    KALENDER_FRACTIE_SLUGS,
+    KALENDER_MONTHS_AHEAD,
     KOHIER_ARTIKEL_URL,
     LOGIN_CHECK,
     LOGIN_PAGE,
     OPHALING_OVERZICHT_URL,
     OPENSTAAND_URL,
     PARKBEZOEK_HISTORIEK_URL,
+    PUBLIC_API,
     RECYCLEPARK_QUOTA_URL,
     SALDO_BEWEGINGEN_JAAR_URL,
     SALDO_BEWEGINGEN_URL,
@@ -68,8 +71,12 @@ class LimburgNetAPI:
         self._username = username
         self._password = password
 
-    def haal_alle_data_op(self) -> dict:
-        """Login en haal alle gekende account-data op."""
+    def haal_alle_data_op(self, calendar_config: dict | None = None) -> dict:
+        """Login en haal alle gekende account-data op.
+
+        Optioneel ook de publieke ophalingkalender ophalen wanneer
+        `calendar_config` nis_code/straat_nummer/huisnummer bevat.
+        """
         token = self._login()
         resultaat: dict = {
             "ledigingen": {},
@@ -78,6 +85,7 @@ class LimburgNetAPI:
             "parkbezoeken": {},
             "slimme_sorteerpunten": {},
             "ophaling_overzicht": None,
+            "kalender": None,
         }
 
         from .const import FRACTIES
@@ -113,6 +121,24 @@ class LimburgNetAPI:
         except Exception as err:
             _LOGGER.warning("Ophaling-overzicht niet beschikbaar: %s", err)
             resultaat["ophaling_overzicht"] = None
+
+        if calendar_config:
+            try:
+                resultaat["kalender"] = haal_kalender_events(
+                    nis_code=str(calendar_config["nis_code"]),
+                    straat_nummer=str(calendar_config["straat_nummer"]),
+                    huisnummer=str(calendar_config["huisnummer"]),
+                    toevoeging=str(calendar_config.get("toevoeging") or ""),
+                    months_ahead=KALENDER_MONTHS_AHEAD,
+                )
+                _LOGGER.debug(
+                    "✅ kalender: %d events, %d fracties",
+                    len((resultaat["kalender"] or {}).get("events") or []),
+                    len((resultaat["kalender"] or {}).get("next_by_fractie") or {}),
+                )
+            except Exception as err:
+                _LOGGER.warning("Kalender niet beschikbaar: %s", err)
+                resultaat["kalender"] = None
 
         return resultaat
 
@@ -759,3 +785,195 @@ class LimburgNetAPI:
             return None
         user = data.get("user") if isinstance(data.get("user"), dict) else data
         return _to_float(_pick(user, "saldo", "punten", "puntensaldo", "points", "balance"))
+
+
+
+# ---------------------------------------------------------------------------
+# Publieke ophalingkalender (geen JWT)
+# ---------------------------------------------------------------------------
+
+def _public_headers() -> dict:
+    return {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
+        "Referer": f"{BASE_URL}/afval-kalender",
+        "Origin": BASE_URL,
+    }
+
+
+def _public_get(url: str, params: dict | None = None) -> object:
+    resp = requests.get(url, params=params or {}, headers=_public_headers(), timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def search_gemeenten(query: str) -> list[dict]:
+    """Zoek gemeenten op naam. Retourneert [{nisCode, naam}, ...]."""
+    data = _public_get(
+        f"{PUBLIC_API}/afval-kalender/gemeenten/search",
+        {"query": query},
+    )
+    if not isinstance(data, list):
+        return []
+    return [
+        {"nisCode": str(item.get("nisCode", "")), "naam": item.get("naam") or ""}
+        for item in data
+        if item.get("nisCode")
+    ]
+
+
+def search_straten(nis_code: str, query: str) -> list[dict]:
+    """Zoek straten binnen een gemeente. Retourneert [{nummer, naam}, ...]."""
+    data = _public_get(
+        f"{PUBLIC_API}/afval-kalender/gemeente/{nis_code}/straten/search",
+        {"query": query},
+    )
+    if not isinstance(data, list):
+        return []
+    return [
+        {"nummer": str(item.get("nummer", "")), "naam": item.get("naam") or ""}
+        for item in data
+        if item.get("nummer") is not None
+    ]
+
+
+def _slug_fractie(label: str) -> str:
+    key = (label or "").strip().lower()
+    if key in KALENDER_FRACTIE_SLUGS:
+        return KALENDER_FRACTIE_SLUGS[key]
+    # fallback: ascii-ish slug
+    out = []
+    for ch in key:
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in (" ", "&", "-", "/"):
+            out.append("_")
+    slug = "".join(out).strip("_")
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug or "onbekend"
+
+
+def _parse_event_date(raw: str):
+    """Parse API ISO datetime → date."""
+    from datetime import date as date_cls, datetime as dt_cls
+
+    if not raw:
+        return None
+    text = f"{raw[:-1]}+00:00" if raw.endswith("Z") else raw
+    try:
+        return dt_cls.fromisoformat(text).date()
+    except ValueError:
+        try:
+            return date_cls.fromisoformat(text[:10])
+        except ValueError:
+            return None
+
+
+def haal_maand_kalender(
+    nis_code: str,
+    year: int,
+    month: int,
+    straat_nummer: str,
+    huisnummer: str,
+    toevoeging: str = "",
+) -> dict:
+    """Haal één maandkalender op (events + legende)."""
+    url = f"{PUBLIC_API}/kalender/{nis_code}/{year}-{month}"
+    params = {
+        "straatNummer": straat_nummer,
+        "huisNummer": huisnummer,
+        "toevoeging": toevoeging or "",
+    }
+    data = _public_get(url, params)
+    return data if isinstance(data, dict) else {}
+
+
+def haal_kalender_events(
+    nis_code: str,
+    straat_nummer: str,
+    huisnummer: str,
+    toevoeging: str = "",
+    months_ahead: int = KALENDER_MONTHS_AHEAD,
+) -> dict:
+    """Fetch and merge collection events for the current and upcoming months.
+
+    Returns a structured dict:
+      events: list[{date, date_iso, fractie, fractie_slug, title, type, detail_url}]
+      next_by_fractie: {slug: event}
+      next_overall: event | None
+      legende: {code: omschrijving}
+    """
+    from datetime import date as date_cls
+
+    today = date_cls.today()
+    year, month = today.year, today.month
+    merged: list[dict] = []
+    legende: dict = {}
+
+    for _ in range(max(1, months_ahead)):
+        month_data = haal_maand_kalender(
+            nis_code, year, month, straat_nummer, huisnummer, toevoeging
+        )
+        raw_legende = month_data.get("activiteitenLegende") or {}
+        if isinstance(raw_legende, dict):
+            for code, info in raw_legende.items():
+                if isinstance(info, dict):
+                    legende[str(code)] = info.get("omschrijving") or str(code)
+                else:
+                    legende[str(code)] = str(info)
+
+        for item in month_data.get("events") or []:
+            if not isinstance(item, dict):
+                continue
+            # Prefer house-to-house collection events
+            event_type = item.get("type") or ""
+            label = item.get("title") or item.get("category") or ""
+            raw_date = item.get("date")
+            event_date = _parse_event_date(raw_date) if raw_date else None
+            if not event_date or not label:
+                continue
+            merged.append({
+                "date": event_date.isoformat(),
+                "date_iso": raw_date,
+                "fractie": label,
+                "fractie_slug": _slug_fractie(label),
+                "title": label,
+                "type": event_type,
+                "category": item.get("category") or label,
+                "detail_url": item.get("detailUrl"),
+                "description": item.get("description"),
+            })
+
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+
+    # Sort and de-dupe by (date, slug)
+    merged.sort(key=lambda e: (e["date"], e["fractie_slug"]))
+    seen: set[tuple[str, str]] = set()
+    unique: list[dict] = []
+    for event in merged:
+        key = (event["date"], event["fractie_slug"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(event)
+
+    upcoming = [e for e in unique if e["date"] >= today.isoformat()]
+    next_by: dict[str, dict] = {}
+    for event in upcoming:
+        slug = event["fractie_slug"]
+        if slug not in next_by:
+            next_by[slug] = event
+
+    return {
+        "events": unique,
+        "upcoming": upcoming,
+        "next_by_fractie": next_by,
+        "next_overall": upcoming[0] if upcoming else None,
+        "legende": legende,
+        "fracties": sorted({e["fractie_slug"] for e in unique}),
+    }
