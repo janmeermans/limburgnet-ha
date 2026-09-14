@@ -9,19 +9,19 @@ from urllib.parse import urlencode
 import requests
 
 from .const import (
-    AANSLAGBILJETTEN_URL,
+    API_PROXY,
     BASE_URL,
+    HUIDIG_SALDO_URL,
     KOHIER_ARTIKEL_URL,
     LOGIN_CHECK,
     LOGIN_PAGE,
     OPHALING_OVERZICHT_URL,
+    OPENSTAAND_URL,
     PARKBEZOEK_HISTORIEK_URL,
     RECYCLEPARK_QUOTA_URL,
-    REKENSTAAT_BEWEGINGEN_URL,
-    REKENSTAAT_DIRECTE_INNING_URL,
-    REKENSTAAT_HUIDIG_SALDO_URL,
-    REKENSTAAT_OPENSTAAND_URL,
-    REKENSTAAT_TIMELINE_URL,
+    SALDO_BEWEGINGEN_JAAR_URL,
+    SALDO_BEWEGINGEN_URL,
+    SALDO_TIMELINE_URL,
     SLIMME_SORTEERPUNTEN_ACTIES_URL,
     SLIMME_SORTEERPUNTEN_HISTORIEK_URL,
     SLIMME_SORTEERPUNTEN_USER_URL,
@@ -122,44 +122,38 @@ class LimburgNetAPI:
             "huidig_saldo": None,
             "bewegingen": [],
             "timeline": [],
+            "bewegingen_per_jaar": None,
             "directe_inning": None,
             "kohier": [],
             "aanslagbiljetten": None,
         }
         try:
             blok["openstaand"] = self._parse_openstaand(
-                self._get_json(token, REKENSTAAT_OPENSTAAND_URL, f"{BASE_URL}/mijn-limburg/betalingen")
+                self._get_json(token, OPENSTAAND_URL, f"{BASE_URL}/mijn-limburg/betalingen")
             )
         except Exception as err:
             _LOGGER.warning("totaal-openstaand mislukt: %s", err)
 
         try:
             blok["huidig_saldo"] = self._parse_huidig_saldo(
-                self._get_json(token, REKENSTAAT_HUIDIG_SALDO_URL, f"{BASE_URL}/mijn-limburg/betalingen")
+                self._get_json(token, HUIDIG_SALDO_URL, f"{BASE_URL}/mijn-limburg/betalingen")
             )
         except Exception as err:
             _LOGGER.warning("huidig-saldo mislukt: %s", err)
 
         try:
             blok["bewegingen"] = self._parse_bewegingen(
-                self._get_json(token, REKENSTAAT_BEWEGINGEN_URL, f"{BASE_URL}/mijn-limburg/betalingen")
+                self._get_json(token, SALDO_BEWEGINGEN_URL, f"{BASE_URL}/mijn-limburg/betalingen")
             )
         except Exception as err:
             _LOGGER.warning("bewegingen mislukt: %s", err)
 
         try:
             blok["timeline"] = self._parse_bewegingen(
-                self._get_json(token, REKENSTAAT_TIMELINE_URL, f"{BASE_URL}/mijn-limburg/betalingen")
+                self._get_json(token, SALDO_TIMELINE_URL, f"{BASE_URL}/mijn-limburg/betalingen")
             )
         except Exception as err:
             _LOGGER.warning("bewegingen-timeline mislukt: %s", err)
-
-        try:
-            blok["directe_inning"] = self._parse_directe_inning(
-                self._get_json(token, REKENSTAAT_DIRECTE_INNING_URL, f"{BASE_URL}/mijn-limburg/betalingen")
-            )
-        except Exception as err:
-            _LOGGER.warning("saldo-directe-inning mislukt: %s", err)
 
         try:
             blok["kohier"] = self._parse_kohier(
@@ -168,22 +162,59 @@ class LimburgNetAPI:
         except Exception as err:
             _LOGGER.warning("kohier-artikel mislukt: %s", err)
 
-        try:
-            list_data = self._get_json(token, AANSLAGBILJETTEN_URL, f"{BASE_URL}/mijn-limburg/afvalbelasting")
-            blok["aanslagbiljetten"] = self._parse_aanslagbiljetten(list_data)
-            detail_id = (blok["aanslagbiljetten"] or {}).get("eerste_id")
-            if detail_id is not None:
-                try:
-                    detail = self._get_json(
+        # Aanslagbiljetten + saldo-directe-inning hangen aan een kohier-artikel id
+        kohier_id = None
+        for item in blok.get("kohier") or []:
+            if item.get("id") is not None:
+                kohier_id = item["id"]
+                break
+
+        if kohier_id is not None:
+            try:
+                list_data = self._get_json(
+                    token,
+                    f"{API_PROXY}/afvalbelasting/kohier-artikel/{kohier_id}/aanslagbiljetten",
+                    f"{BASE_URL}/mijn-limburg/afvalbelasting",
+                )
+                blok["aanslagbiljetten"] = self._parse_aanslagbiljetten(list_data)
+                blok["aanslagbiljetten"]["kohier_id"] = kohier_id
+                detail_id = (blok["aanslagbiljetten"] or {}).get("eerste_id")
+                if detail_id is not None:
+                    try:
+                        detail = self._get_json(
+                            token,
+                            f"{API_PROXY}/afvalbelasting/aanslagbiljet/{detail_id}",
+                            f"{BASE_URL}/mijn-limburg/afvalbelasting",
+                        )
+                        blok["aanslagbiljetten"]["detail"] = self._parse_aanslag_detail(detail)
+                    except Exception as err:
+                        _LOGGER.warning("aanslagbiljet detail %s mislukt: %s", detail_id, err)
+            except Exception as err:
+                _LOGGER.warning("aanslagbiljetten mislukt: %s", err)
+
+            try:
+                blok["directe_inning"] = self._parse_directe_inning(
+                    self._get_json(
                         token,
-                        f"{AANSLAGBILJETTEN_URL}/{detail_id}",
+                        f"{API_PROXY}/afvalbelasting/kohier-artikel/{kohier_id}/saldo-directe-inning",
                         f"{BASE_URL}/mijn-limburg/afvalbelasting",
                     )
-                    blok["aanslagbiljetten"]["detail"] = self._parse_aanslag_detail(detail)
-                except Exception as err:
-                    _LOGGER.warning("aanslagbiljet detail %s mislukt: %s", detail_id, err)
+                )
+            except Exception as err:
+                _LOGGER.warning("saldo-directe-inning mislukt: %s", err)
+        else:
+            _LOGGER.debug("Geen kohier-artikel id — skip aanslagbiljetten/directe inning")
+
+        try:
+            jaar_data = self._get_json(
+                token, SALDO_BEWEGINGEN_JAAR_URL, f"{BASE_URL}/mijn-limburg/betalingen"
+            )
+            if isinstance(jaar_data, list):
+                blok["bewegingen_per_jaar"] = jaar_data[:20]
+            elif isinstance(jaar_data, dict):
+                blok["bewegingen_per_jaar"] = jaar_data
         except Exception as err:
-            _LOGGER.warning("aanslagbiljetten mislukt: %s", err)
+            _LOGGER.warning("bewegingen-per-jaar mislukt: %s", err)
 
         return blok
 
